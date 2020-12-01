@@ -27,12 +27,16 @@ def get_value(client, query: str, column: str, start_dt: datetime, end_dt: datet
     symbol, timeframe, attribute = query.split("/")
     try:
         params = pymkts.Params(symbol, timeframe, attribute, start=start_dt, end=end_dt)
-        return client.query(params).last().df().iloc[-1].get(column, 0)
+        df = client.query(params).first().df()
+        if df.empty:
+            return 0
+        return df.iloc[-1].get(column, 0)
     except ConnectionError as e:
         logger.error("connection error")
     except Exception as e:
         if is_symbol_does_not_exist_error(e):
             logger.error("symbol does not exists: {}".format(query))
+        # ignore other errors
 
     return 0
 
