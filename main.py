@@ -40,7 +40,8 @@ def get_value(client, query: str, column: str, start_dt: datetime, end_dt: datet
 def run(args: argparse.Namespace):
     gauges = {}
     for query in args.queries:
-        key = query.replace("/", "_").lower()  # USDJPY/1S/TICK -> USDJPY_1S_TICK
+        # USDJPY/1S/TICK -> USDJPY_1S_TICK
+        key = query.replace("/", "_").replace("-", "_").lower()
         gauges[query] = Gauge(args.prefix + "_" + key, "value of {}".format(query))
 
     url = f"http://{args.marketstore_host}:{args.marketstore_port}/rpc"
