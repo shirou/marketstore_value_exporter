@@ -28,7 +28,7 @@ def get_value(client, query: str, column: str, start_dt: datetime, end_dt: datet
     try:
         params = pymkts.Params(symbol, timeframe, attribute, start=start_dt, end=end_dt)
         df = client.query(params).first().df()
-        if df.empty:
+        if df is None or df.empty:
             return 0
         return df.iloc[-1].get(column, 0)
     except ConnectionError as e:
@@ -57,7 +57,8 @@ def run(args: argparse.Namespace):
         end_dt = datetime.datetime.utcnow()
         start_dt = end_dt - delta
 
-        for key, g in gauges.items():
+        for query in args.queries:
+            g = gauges[query]
             g.set(get_value(client, query, args.column, start_dt, end_dt))
         time.sleep(args.interval)
 
@@ -94,7 +95,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--column",
         type=str,
-        default=os.environ.get("CLOUMN", "price"),
+        default=os.environ.get("COLUMN", "price"),
         help="column name to get",
     )
 

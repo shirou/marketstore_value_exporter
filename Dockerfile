@@ -6,7 +6,7 @@ COPY requirements.lock /opt/app
 RUN pip3 install -r requirements.lock
 
 #################################################
-FROM gcr.io/distroless/python3-debian10:debug as runner
+FROM gcr.io/distroless/python3-debian10 as runner
 
 COPY --from=builder /usr/local/lib/python3.7/site-packages /root/.local/lib/python3.7/site-packages
 
