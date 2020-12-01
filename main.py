@@ -23,13 +23,11 @@ def is_symbol_does_not_exist_error(e: Exception) -> bool:
     return any([msg in str(e) for msg in msgs])
 
 
-def get_value(client, query: str, column: str, start_dt: datetime):
-    symbol, timeframe, target = query.split("/")
-
+def get_value(client, query: str, column: str, start_dt: datetime, end_dt: datetime):
+    symbol, timeframe, attribute = query.split("/")
     try:
-        params = pymkts.Params(symbol, timeframe, target, start=start_dt)
-        df = client.query(params).last().df()
-        return df[column]
+        params = pymkts.Params(symbol, timeframe, attribute, start=start_dt, end=end_dt)
+        return client.query(params).last().df().iloc[-1].get(column, 0)
     except ConnectionError as e:
         logger.error("connection error")
     except Exception as e:
@@ -46,15 +44,16 @@ def run(args: argparse.Namespace):
         gauges[query] = Gauge(args.prefix + "_" + key, "value of {}".format(query))
 
     url = f"http://{args.marketstore_host}:{args.marketstore_port}/rpc"
-    delta = datetime.timedelta(args.interval)
+    delta = datetime.timedelta(seconds=args.interval)
 
     while True:
         client = pymkts.Client(url)
 
-        start_dt = datetime.datetime.utcnow() - delta
+        end_dt = datetime.datetime.utcnow()
+        start_dt = end_dt - delta
 
         for key, g in gauges.items():
-            g.set(get_value(client, query, args.column, start_dt))
+            g.set(get_value(client, query, args.column, start_dt, end_dt))
         time.sleep(args.interval)
 
 
@@ -96,7 +95,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "queries",
-        metavar="USDJPY/1S/TICK",
+        metavar="USDJPY/1Sec/TICK",
         type=str,
         nargs="+",
         help="list of marketstore query",
