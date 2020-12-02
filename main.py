@@ -11,6 +11,10 @@ import datetime
 from prometheus_client import start_http_server, Gauge
 import pymarketstore as pymkts
 
+logging.basicConfig(
+    level=logging.ERROR,
+    format='{"level": "%(levelname)s", "time": "%(asctime)s", "msg": "%(message)s"}',
+)
 logger = logging.getLogger(__name__)
 
 
@@ -30,23 +34,37 @@ def get_value(client, query: str, column: str, start_dt: datetime, end_dt: datet
         df = client.query(params).first().df()
         if df is None or df.empty:
             return 0
-        return df.iloc[-1].get(column, 0)
+        value = df.tail(1).get(column)
+        if value is None:
+            logger.error("column %s does not exists", column)
+            return (0, 0)
+        latency = end_dt - df.index[-1]
+        return (value, latency.total_seconds())
     except ConnectionError as e:
         logger.error("connection error")
     except Exception as e:
         if is_symbol_does_not_exist_error(e):
-            logger.error("symbol does not exists: {}".format(query))
+            logger.error("symbol does not exists: %s", query)
+        else:
+            logger.error(e)
         # ignore other errors
 
-    return 0
+    return (0, 0)
 
 
 def run(args: argparse.Namespace):
-    gauges = {}
+    gauges_value = {}
+    gauges_latency = {}
+    gauge_avg = Gauge(f"{args.prefix}_avg_latency", "avg latency")
     for query in args.queries:
-        # USDJPY/1S/TICK -> USDJPY_1S_TICK
+        # USDJPY/1Sec/TICK -> usdjpy_1sec_tick
         key = query.replace("/", "_").replace("-", "_").lower()
-        gauges[query] = Gauge(args.prefix + "_" + key, "value of {}".format(query))
+        gauges_value[query] = Gauge(
+            f"{args.prefix}_{key}_value", "value of {}".format(query)
+        )
+        gauges_latency[query] = Gauge(
+            f"{args.prefix}_{key}_latency", "latency of {}".format(query)
+        )
 
     url = f"http://{args.marketstore_host}:{args.marketstore_port}/rpc"
     delta = datetime.timedelta(seconds=args.interval)
@@ -54,12 +72,17 @@ def run(args: argparse.Namespace):
     while True:
         client = pymkts.Client(url)
 
-        end_dt = datetime.datetime.utcnow()
+        end_dt = pd.Timestamp.utcnow()
         start_dt = end_dt - delta
 
+        total = 0
         for query in args.queries:
-            g = gauges[query]
-            g.set(get_value(client, query, args.column, start_dt, end_dt))
+            (value, latency) = get_value(client, query, args.column, start_dt, end_dt)
+            gauges_value[query].set(value)
+            gauges_latency[query].set(latency)
+            total += latency
+
+        gauge_avg.set(total / len(args.queries))
         time.sleep(args.interval)
 
 
@@ -75,12 +98,6 @@ if __name__ == "__main__":
         help="get value interval seconds",
     )
     parser.add_argument(
-        "--prefix",
-        type=str,
-        default=os.environ.get("PREFIX", "marketstore"),
-        help="prometheus key prefix",
-    )
-    parser.add_argument(
         "--marketstore-host",
         type=str,
         default=os.environ.get("MARKETSTORE_HOST", "localhost"),
@@ -91,6 +108,12 @@ if __name__ == "__main__":
         type=int,
         default=os.environ.get("MARKETSTORE_PORT", 5993),
         help="marketstore port",
+    )
+    parser.add_argument(
+        "--prefix",
+        type=str,
+        default=os.environ.get("PREFIX", "marketstore"),
+        help="prometheus key prefix",
     )
     parser.add_argument(
         "--column",
