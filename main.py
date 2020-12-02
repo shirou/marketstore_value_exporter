@@ -19,6 +19,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+ERROR_VALUE_OF_LATENCY = 9999  # return this value if can not find in the lookback time
+
+
 def is_symbol_does_not_exist_error(e: Exception) -> bool:
     msgs = [
         "Symbol not in catalog",
@@ -33,8 +36,8 @@ def get_value(client, query: str, column: str, start_dt: datetime, end_dt: datet
     try:
         params = pymkts.Params(symbol, timeframe, attribute, start=start_dt, end=end_dt)
         df = client.query(params).first().df()
-        if df is None or df.empty:
-            return 0
+        if df is None or df.empty:  # there are no result
+            return (0, ERROR_VALUE_OF_LATENCY)
         value = df.tail(1).get(column)
         if value is None:
             logger.error("column %s does not exists", column)
@@ -67,7 +70,7 @@ def run(args: argparse.Namespace):
         )
 
     url = f"http://{args.marketstore_host}:{args.marketstore_port}/rpc"
-    delta = datetime.timedelta(seconds=args.interval)
+    delta = datetime.timedelta(seconds=args.lookback)
 
     while True:
         client = pymkts.Client(url)
@@ -100,6 +103,12 @@ if __name__ == "__main__":
         type=int,
         default=os.environ.get("INTERVAL", 60),
         help="get value interval seconds",
+    )
+    parser.add_argument(
+        "--lookback",
+        type=int,
+        default=os.environ.get("LOOKBACK", 3600),
+        help="lookback window size(seconds) to search result",
     )
     parser.add_argument(
         "--marketstore-host",
