@@ -123,3 +123,7 @@ You can specify multiple queris.
 - `column` is used for all queries.
 - `latency` is calcurated from `Epoch`.
 - If there are no result in the `lookback`, returns value 0, latency 9999.
+
+# License
+
+Apache 2.0
