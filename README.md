@@ -114,9 +114,15 @@ optional arguments:
                         marketstore port
   --prefix PREFIX       prometheus key prefix (default=marketstore)
   --column COLUMN       column name to get (default=price)
+  --market MARKET       market to set holidays (default="")
 ```
 
 You can specify multiple queris.
+
+`market` is an option to set holiday and opening time. You can specify [ISO-10383 market identifier code](https://www.iso20022.org/market-identifier-codes) like "XTKS" to check the market is open or closed. If market is closed, returns value and latency are both 0. If does not specify market, it means 24/365.
+
+See [quantopian/trading_calendars](https://github.com/quantopian/trading_calendars) more detail.
+
 
 ## Note:
 

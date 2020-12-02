@@ -11,6 +11,7 @@ import time
 import pandas as pd
 import pymarketstore as pymkts
 from prometheus_client import Gauge, start_http_server
+import trading_calendars as tc
 
 logging.basicConfig(
     level=logging.ERROR,
@@ -34,7 +35,9 @@ def is_symbol_does_not_exist_error(e: Exception) -> bool:
 def get_value(client, query: str, column: str, start_dt: datetime, end_dt: datetime):
     symbol, timeframe, attribute = query.split("/")
     try:
-        params = pymkts.Params(symbol, timeframe, attribute, start=start_dt, end=end_dt)
+        params = pymkts.Params(
+            symbol, timeframe, attribute, limit=1, start=start_dt, end=end_dt
+        )
         df = client.query(params).first().df()
         if df is None or df.empty:  # there are no result
             return (0, ERROR_VALUE_OF_LATENCY)
@@ -72,15 +75,28 @@ def run(args: argparse.Namespace):
     url = f"http://{args.marketstore_host}:{args.marketstore_port}/rpc"
     delta = datetime.timedelta(seconds=args.lookback)
 
+    cal = None
+    if args.market:
+        cal = tc.get_calendar("XNYS")
+
     while True:
         client = pymkts.Client(url)
 
         end_dt = pd.Timestamp.utcnow()
         start_dt = end_dt - delta
 
+        holiday = False
+        if cal and cal.is_session(end_dt) is False:
+            holiday = True
+
         total = 0
         for query in args.queries:
-            (value, latency) = get_value(client, query, args.column, start_dt, end_dt)
+            if holiday:
+                value, latency = (0, 0)
+            else:
+                (value, latency) = get_value(
+                    client, query, args.column, start_dt, end_dt
+                )
             gauges_value[query].set(value)
             gauges_latency[query].set(latency)
             total += latency
@@ -133,6 +149,12 @@ if __name__ == "__main__":
         type=str,
         default=os.environ.get("COLUMN", "price"),
         help="column name to get",
+    )
+    parser.add_argument(
+        "--market",
+        type=str,
+        default=os.environ.get("MARKET", ""),
+        help="market to set holidays",
     )
 
     parser.add_argument(
