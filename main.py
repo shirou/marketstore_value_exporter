@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 
 import argparse
-import os
-import time
-import logging
-import pandas as pd
 import datetime
+import logging
+import os
+import signal
+import sys
+import time
 
-
-from prometheus_client import start_http_server, Gauge
+import pandas as pd
 import pymarketstore as pymkts
+from prometheus_client import Gauge, start_http_server
 
 logging.basicConfig(
     level=logging.ERROR,
@@ -47,7 +48,6 @@ def get_value(client, query: str, column: str, start_dt: datetime, end_dt: datet
             logger.error("symbol does not exists: %s", query)
         else:
             logger.error(e)
-        # ignore other errors
 
     return (0, 0)
 
@@ -84,6 +84,10 @@ def run(args: argparse.Namespace):
 
         gauge_avg.set(total / len(args.queries))
         time.sleep(args.interval)
+
+
+def exit_handler(signum, frame) -> None:
+    sys.exit(0)
 
 
 if __name__ == "__main__":
@@ -131,6 +135,8 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+    signal.signal(signal.SIGTERM, exit_handler)
+
     start_http_server(8000)
 
     run(args)
